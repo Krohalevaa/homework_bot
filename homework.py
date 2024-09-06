@@ -3,6 +3,10 @@ import sys
 import time
 import requests
 import os
+from http import HTTPStatus
+from telebot.apihelper import ApiException
+
+from exeptions import EndpointError, StatusError
 from dotenv import load_dotenv
 from telebot import TeleBot
 
@@ -24,7 +28,6 @@ HOMEWORK_VERDICTS = {
     "rejected": "Работа проверена: у ревьюера есть замечания.",
 }
 
-# Логирование
 logging.basicConfig(
     level=logging.DEBUG,
     filename="tg_bot.log",
@@ -32,29 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
-
-
-class EndpointError(Exception):
-    """Исключение: Ошибка в адресе."""
-
-    def __init__(self, response):
-        """Обозначение ошибки."""
-        endpoint_message = (
-            f'Адрес: {response.url} не отвечает. '
-            f'Код ответа: {response.status_code}]'
-        )
-        super().__init__(endpoint_message)
-
-
-class StatusError(Exception):
-    """Исключение: Ошибка в статусе."""
-
-    def __init__(self, text):
-        """Обозначение ошибки."""
-        status_message = (
-            f'Статус ответа: {text}'
-        )
-        super().__init__(status_message)
 
 
 def check_tokens():
@@ -80,8 +60,14 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.debug(f"Ура! Это сообщение успешно отправлено: {message}")
-    except Exception as error:
-        logging.error(f"Ужас! Это сообщение отправить не получилось: {error}")
+    except ApiException as api_error:
+        logging.error(
+            f"Ужас! Это сообщение: {message}"
+            f"отправить не получилось: {api_error}")
+    except requests.RequestException as request_error:
+        logging.error(
+            f"Ужас! Это сообщение: {message}"
+            f"отправить не получилось: {request_error}")
 
 
 def get_api_answer(timestamp):
@@ -90,8 +76,12 @@ def get_api_answer(timestamp):
     logging.info(f"Отправка запроса на {ENDPOINT} с параметрами {params}")
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            raise EndpointError(response)
+        if response.status_code != HTTPStatus.OK:
+            endpoint_message = (
+                f'Адрес: {response.url} не отвечает. '
+                f'Код ответа: {response.status_code}]'
+            )
+            raise EndpointError(response, endpoint_message)
     except requests.RequestException as error:
         logging.error(error)
     return response.json()
@@ -114,7 +104,7 @@ def check_response(response):
         logging.error(message)
         raise KeyError(message)
 
-    if not isinstance(response.get("homeworks"), list):
+    if not isinstance(response['homeworks'], list):
         message = "Ответ должен быть списком."
         logging.error(message)
         raise TypeError(message)
@@ -124,20 +114,22 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
-    hw_status = homework.get("status")
-    hw_verdict = HOMEWORK_VERDICTS.get(hw_status)
-
-    if homework.get("homework_name"):
-        homework_name = homework.get("homework_name")
-    else:
-        homework_name = "XXX"
-        logging.warning("Домашней работы с таким именем нет.")
-        raise KeyError(homework_name)
-
     if "status" not in homework:
         message = "Нет статуса."
         logging.error(message)
         raise StatusError(message)
+    hw_status = homework.get("status")
+    hw_verdict = HOMEWORK_VERDICTS.get(hw_status)
+    if not homework:
+        message = 'Нет ключа с таким названием.'
+        logging.error(message)
+        raise KeyError(message)
+    if homework.get("homework_name"):
+        homework_name = homework.get("homework_name")
+    else:
+        homework_name = "XXX"
+        logging.warning(f"Такого имени: {homework} нет в ответе")
+        raise KeyError(homework_name)
 
     if hw_status not in HOMEWORK_VERDICTS:
         message = "Статус домашней работы неизвестен."
@@ -152,7 +144,7 @@ def main():
         logging.critical(
             "Принудительная остановка программы из за отсутствия токенов."
         )
-        sys.exit("Отсутствие токенов.")
+        sys.exit(1)
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     send_message(bot, "Привет! Я готов отслеживать изменения.")
@@ -162,27 +154,32 @@ def main():
         try:
             response = get_api_answer(timestamp)
             homeworks = check_response(response)
-            if len(homeworks) == 0:
-                logging.debug("Домашних работ нет.")
-                send_message(bot, "Все по прежнему, изменений нет.")
-                break
+            if homeworks:
+                logging.debug("Все по прежнему, изменений нет.")
             for homework in homeworks:
                 message = parse_status(homework)
                 if last_message != message:
                     send_message(bot, message)
                     last_message = message
-            timestamp = response.get("current_date")
+            timestamp = response.get("timestamp")
 
         except Exception as error:
             if last_message != message:
                 message = f"Ошибка в работе программы: {error}"
                 send_message(bot, message)
                 last_message = message
-        else:
-            last_message = ""
+            else:
+                last_message = ""
         finally:
             time.sleep(RETRY_PERIOD)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename="tg_bot.log",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
+    logger.addHandler(logging.StreamHandler(stream=sys.stdout))
     main()
