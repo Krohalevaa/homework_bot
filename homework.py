@@ -29,6 +29,14 @@ HOMEWORK_VERDICTS = {
 }
 
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename="tg_bot.log",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+
+
 def check_tokens():
     """Проверяет доступность переменных окружения."""
     tokens = {
@@ -136,23 +144,16 @@ def main():
                         last_message = message
                 except StatusError as error:
                     logging.error(f"Ошибка статуса: {error}")
-                except KeyError as error:
-                    logging.error(f"Ошибка ключа: {error}")
-                except Exception as error:
-                    logging.error(f"Неизвестная ошибка: {error}")
             timestamp = response.get("timestamp", int(time.time()))
         except KeyError as error:
-            key_msg = f"Ошибка ключа: {error}"
-            logging.error(key_msg)
-            send_message(bot, key_msg)
+            logging.error(f"Ошибка ключа: {error}")
+            send_message(bot, f"Ошибка ключа: {error}")
         except TypeError as error:
-            type_msg = f"Ошибка типа данных: {error}"
-            logging.error(type_msg)
-            send_message(bot, type_msg)
+            logging.error(f"Ошибка типа данных: {error}")
+            send_message(bot, f"Ошибка типа данных: {error}")
         except Exception as error:
-            error_msg = f"Ошибка в работе программы: {error}"
-            logging.error(error_msg)
-            send_message(bot, error_msg)
+            logging.error(f"Ошибка в работе программы: {error}")
+            send_message(bot, f"Ошибка в работе программы: {error}")
         finally:
             time.sleep(RETRY_PERIOD)
 
