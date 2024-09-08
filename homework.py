@@ -28,6 +28,15 @@ HOMEWORK_VERDICTS = {
     "rejected": "Работа проверена: у ревьюера есть замечания.",
 }
 
+load_dotenv()
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename="tg_bot.log",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler(stream=sys.stdout))
+
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
@@ -150,11 +159,4 @@ def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename="tg_bot.log",
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    logger = logging.getLogger(__name__)
-    logger.addHandler(logging.StreamHandler(stream=sys.stdout))
     main()
