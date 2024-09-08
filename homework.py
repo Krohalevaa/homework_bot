@@ -29,14 +29,6 @@ HOMEWORK_VERDICTS = {
 }
 
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename="tg_bot.log",
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler(stream=sys.stdout))
-
-
 def check_tokens():
     """Проверяет доступность переменных окружения."""
     tokens = {
@@ -126,34 +118,33 @@ def main():
             f"Программа остановлена, отсутствуют токены: {missing_tokens}"
         )
         sys.exit(1)
+
     bot = TeleBot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     send_message(bot, "Привет! Я готов отслеживать изменения.")
     last_message = ""
+
     while True:
         try:
             response = get_api_answer(timestamp)
             homeworks = check_response(response)
-            if not homeworks:
-                logging.debug("Все по прежнему, изменений нет.")
-            for homework in homeworks:
-                try:
+            if homeworks:
+                for homework in homeworks:
                     message = parse_status(homework)
                     if last_message != message:
                         send_message(bot, message)
                         last_message = message
-                except StatusError as error:
-                    logging.error(f"Ошибка статуса: {error}")
+            else:
+                logging.debug("Все по прежнему, изменений нет.")
             timestamp = response.get("timestamp", int(time.time()))
-        except KeyError as error:
-            logging.error(f"Ошибка ключа: {error}")
-            send_message(bot, f"Ошибка ключа: {error}")
-        except TypeError as error:
-            logging.error(f"Ошибка типа данных: {error}")
-            send_message(bot, f"Ошибка типа данных: {error}")
+        except (KeyError, TypeError) as error:
+            key_type_e_msg = f"Ошибка: {type(error).__name__}: {error}"
+            logging.error(key_type_e_msg)
+            send_message(bot, key_type_e_msg)
         except Exception as error:
-            logging.error(f"Ошибка в работе программы: {error}")
-            send_message(bot, f"Ошибка в работе программы: {error}")
+            e_msg = f"Ошибка в работе программы: {error}"
+            logging.error(e_msg)
+            send_message(bot, e_msg)
         finally:
             time.sleep(RETRY_PERIOD)
 
