@@ -29,10 +29,6 @@ HOMEWORK_VERDICTS = {
 }
 
 load_dotenv()
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename="tg_bot.log",
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",)
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler(stream=sys.stdout))
 
@@ -46,7 +42,7 @@ def check_tokens():
     }
     missing_tokens = [
         token_name for token_name,
-        token_value in tokens.items() if token_value is None]
+        token_value in tokens.items() if not token_value]
     if missing_tokens:
         return False, missing_tokens
     return True, tokens
@@ -71,13 +67,12 @@ def get_api_answer(timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.RequestException as error:
         logging.error(error)
-        return
+        raise EndpointError(f"Ошибка запроса к API: {error}")
     if response.status_code != HTTPStatus.OK:
         endpoint_message = (
-            f'Адрес: {response.url} не отвечает. '
+            f'Ответ с адреса: {response.url} не соответствует ожидаемому.'
             f'Код ответа: {response.status_code}]'
         )
-        logging.error(endpoint_message)
         raise EndpointError(endpoint_message)
     return response.json()
 
@@ -101,19 +96,20 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
+    if not homework:
+        raise KeyError('Переменная имеет значение False.')
+
     if "status" not in homework:
         raise StatusError("Нет статуса.")
     hw_status = homework.get("status")
     hw_verdict = HOMEWORK_VERDICTS.get(hw_status)
 
-    if not homework:
-        raise KeyError('Нет ключа с таким названием.')
     if "homework_name" not in homework:
         raise KeyError("Ключ 'homework_name' отсутствует в ответе.")
-    homework_name = homework.get("homework_name")
+    homework_name = homework["homework_name"]
 
     if hw_status not in HOMEWORK_VERDICTS:
-        raise KeyError("Статус домашней работы неизвестен.")
+        raise KeyError(f"Статус домашней работы: {hw_status} неизвестен.")
     return f'Изменился статус проверки работы "{homework_name}". {hw_verdict}'
 
 
@@ -142,9 +138,11 @@ def main():
                     if last_message != message:
                         send_message(bot, message)
                         last_message = message
+                    else:
+                        logger.debug("Сообщение не отправлено: дублирование.")
             else:
                 logging.debug("Все по прежнему, изменений нет.")
-            timestamp = response.get("timestamp", int(time.time()))
+            timestamp = response.get("timestamp", timestamp)
         except (KeyError, TypeError) as error:
             key_type_e_msg = f"Ошибка: {type(error).__name__}: {error}"
             logging.error(key_type_e_msg)
@@ -158,4 +156,8 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename="tg_bot.log",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",)
     main()
