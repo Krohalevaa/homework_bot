@@ -66,7 +66,6 @@ def get_api_answer(timestamp):
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.RequestException as error:
-        logging.error(error)
         raise EndpointError(f"Ошибка запроса к API: {error}")
     if response.status_code != HTTPStatus.OK:
         endpoint_message = (
@@ -96,8 +95,8 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлекает статус домашней работы."""
-    if not homework:
-        raise KeyError('Переменная имеет значение False.')
+    if not isinstance(homework, dict):
+        raise KeyError('Переменная имеет значение, которое приводит к False.')
 
     if "status" not in homework:
         raise StatusError("Нет статуса.")
@@ -147,6 +146,9 @@ def main():
             key_type_e_msg = f"Ошибка: {type(error).__name__}: {error}"
             logging.error(key_type_e_msg)
             send_message(bot, key_type_e_msg)
+        except EndpointError as error:
+            logging.error(f"Ошибка API: {error}")
+            send_message(bot, f"Ошибка API: {error}")
         except Exception as error:
             e_msg = f"Ошибка в работе программы: {error}"
             logging.error(e_msg)
